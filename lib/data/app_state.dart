@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'biometric_service.dart';
+import 'cache_respuestas.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'repository.dart';
@@ -36,6 +37,27 @@ class AppState extends ChangeNotifier {
 
   String? _emailSesion;
   String? _passwordSesion;
+
+  /// Verdadero cuando la última consulta no pudo llegar al servidor y se
+  /// mostraron los datos guardados en el dispositivo.
+  bool sinConexion = false;
+
+  /// Momento en que se guardaron los datos que se están mostrando sin conexión.
+  DateTime? datosDesde;
+
+  void marcarSinConexion(DateTime fecha) {
+    if (sinConexion && datosDesde == fecha) return;
+    sinConexion = true;
+    datosDesde = fecha;
+    notifyListeners();
+  }
+
+  void marcarConConexion() {
+    if (!sinConexion) return;
+    sinConexion = false;
+    datosDesde = null;
+    notifyListeners();
+  }
 
   bool get sesionIniciada => token != null && (tokenExpira == null || tokenExpira!.isAfter(DateTime.now()));
 
@@ -87,8 +109,11 @@ class AppState extends ChangeNotifier {
     _emailSesion = email;
     _passwordSesion = password;
     mensajeLogin = null;
+    sinConexion = false;
+    datosDesde = null;
     notifyListeners();
 
+    await CacheRespuestas.instance.borrarTodo();
     await _store.guardar(LocalStore.kToken, sesion.token);
     await _store.guardar(LocalStore.kTokenExpira, '${tokenExpira!.millisecondsSinceEpoch}');
     if (huellaActiva && await BiometricService.instance.disponible()) {
@@ -105,9 +130,12 @@ class AppState extends ChangeNotifier {
     _emailSesion = null;
     avisos = <Aviso>[];
     mensajeLogin = mensaje;
+    sinConexion = false;
+    datosDesde = null;
     InventarioRepository.instance.invalidar();
     notifyListeners();
 
+    await CacheRespuestas.instance.borrarTodo();
     await _store.borrar(LocalStore.kToken);
     await _store.borrar(LocalStore.kTokenExpira);
   }

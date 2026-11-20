@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_theme.dart';
 import '../core/nav.dart';
+import '../data/app_state.dart';
 
 /// Estructura común de las pantallas internas: cabecera azul y hoja clara con
 /// esquinas superiores redondeadas. Si [navIndex] no es nulo, muestra la barra
@@ -45,7 +46,15 @@ class BlueScaffold extends StatelessWidget {
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: Container(color: AppColors.background, child: child),
+              child: Container(
+                color: AppColors.background,
+                child: Column(
+                  children: [
+                    const _BannerSinConexion(),
+                    Expanded(child: child),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -207,4 +216,42 @@ class _NavItem {
   final String label;
   final IconData icon;
   final IconData activeIcon;
+}
+
+/// Aviso que aparece cuando no hay conexión con el servidor y la pantalla está
+/// mostrando los últimos datos guardados en el dispositivo.
+class _BannerSinConexion extends StatelessWidget {
+  const _BannerSinConexion();
+
+  String _dos(int n) => n.toString().padLeft(2, '0');
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AppState.instance,
+      builder: (context, _) {
+        final estado = AppState.instance;
+        if (!estado.sinConexion) return const SizedBox.shrink();
+        final f = estado.datosDesde;
+        final cuando = f == null ? '' : ' del ${_dos(f.day)}/${_dos(f.month)} a las ${_dos(f.hour)}:${_dos(f.minute)}';
+        return Container(
+          width: double.infinity,
+          color: const Color(0xFFFFF3CD),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 18, color: Color(0xFF8A6D1D)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Sin conexión con el servidor. Mostrando los datos guardados$cuando.',
+                  style: const TextStyle(fontSize: 12.5, color: Color(0xFF5C4A12)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }

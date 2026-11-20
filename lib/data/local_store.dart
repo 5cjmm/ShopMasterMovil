@@ -44,6 +44,20 @@ class LocalStore {
     }
   }
 
+  /// Borra todas las claves que empiezan por [prefijo].
+  Future<void> borrarPrefijo(String prefijo) async {
+    try {
+      final todo = await _storage.readAll();
+      for (final clave in todo.keys) {
+        if (clave.startsWith(prefijo)) {
+          await _storage.delete(key: clave);
+        }
+      }
+    } catch (_) {
+      // Nada que hacer.
+    }
+  }
+
   Future<bool?> leerBool(String clave) async {
     final v = await leer(clave);
     if (v == 'true') return true;

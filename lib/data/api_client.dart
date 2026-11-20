@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../core/config.dart';
+import 'cache_respuestas.dart';
 import 'mock_data.dart';
 
 class ApiException implements Exception {
@@ -35,7 +36,14 @@ abstract class ApiClient {
 /// login y recuperar. Si recibe 401 en otra pantalla avisa con [onUnauthorized]
 /// para borrar el token y volver al login.
 class HttpApiClient implements ApiClient {
-  HttpApiClient({http.Client? client, this.tokenProvider, this.onUnauthorized, String? baseUrl})
+  HttpApiClient({
+    http.Client? client,
+    this.tokenProvider,
+    this.onUnauthorized,
+    this.onSinConexion,
+    this.onConexion,
+    String? baseUrl,
+  })
       : _client = client ?? http.Client(),
         _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
@@ -43,6 +51,23 @@ class HttpApiClient implements ApiClient {
   final String _baseUrl;
   final TokenProvider? tokenProvider;
   final void Function()? onUnauthorized;
+
+  /// Se llama cuando no hubo respuesta del servidor y se devolvió la última
+  /// respuesta guardada en el dispositivo; recibe el momento en que se guardó.
+  final void Function(DateTime fecha)? onSinConexion;
+
+  /// Se llama cuando el servidor respondió bien.
+  final void Function()? onConexion;
+
+  /// Devuelve la última respuesta guardada de una consulta GET, o null si no
+  /// hay ninguna (o si no es una consulta que se guarde).
+  Future<Map<String, dynamic>?> _desdeCache(String method, String path, Uri uri) async {
+    if (method != 'GET' || _esRutaPublica(path)) return null;
+    final guardada = await CacheRespuestas.instance.leer(uri);
+    if (guardada == null) return null;
+    onSinConexion?.call(guardada.fecha);
+    return guardada.json;
+  }
 
   @override
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) {
@@ -79,8 +104,12 @@ class HttpApiClient implements ApiClient {
           : _client.get(uri, headers: headers);
       response = await futuro.timeout(AppConfig.timeout);
     } on TimeoutException {
+      final guardada = await _desdeCache(method, path, uri);
+      if (guardada != null) return guardada;
       throw ApiException('El servidor tardó demasiado en responder. Intenta de nuevo.');
     } catch (_) {
+      final guardada = await _desdeCache(method, path, uri);
+      if (guardada != null) return guardada;
       throw ApiException('No hay conexión con el servidor. Revisa tu red e intenta de nuevo.');
     }
 
@@ -118,6 +147,10 @@ class HttpApiClient implements ApiClient {
     }
     if (json['success'] == false) {
       throw ApiException(mensaje ?? 'No se pudo completar la operación.', codigo);
+    }
+    if (method == 'GET' && !_esRutaPublica(path)) {
+      onConexion?.call();
+      unawaited(CacheRespuestas.instance.guardar(uri, json));
     }
     return json;
   }
