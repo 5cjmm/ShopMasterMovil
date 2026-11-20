@@ -18,7 +18,12 @@ class InventarioRepository {
     if (AppConfig.useMock) {
       return MockApiClient(tokenProvider: token, onUnauthorized: expirada);
     }
-    return HttpApiClient(tokenProvider: token, onUnauthorized: expirada);
+    return HttpApiClient(
+      tokenProvider: token,
+      onUnauthorized: expirada,
+      onSinConexion: AppState.instance.marcarSinConexion,
+      onConexion: AppState.instance.marcarConConexion,
+    );
   }
 
   final ApiClient _api;
@@ -30,8 +35,12 @@ class InventarioRepository {
 
     final futuro = cargar();
     _cache[key] = futuro;
-    // Si falla no se guarda, para que "Reintentar" vuelva a pedirlo.
-    futuro.then((_) {}, onError: (Object _) {
+    // Si falla no se guarda, para que "Reintentar" vuelva a pedirlo. Lo mismo si
+    // la respuesta salió de los datos guardados por no haber conexión: así, al
+    // volver internet, la siguiente consulta pide los datos nuevos.
+    futuro.then((_) {
+      if (AppState.instance.sinConexion) _cache.remove(key);
+    }, onError: (Object _) {
       _cache.remove(key);
     });
     return futuro;
